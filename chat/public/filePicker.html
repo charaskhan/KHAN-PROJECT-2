@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+  </head>
+  <body>
+    <script type="text/javascript">
+      /* exported gapiLoaded */
+      /* exported gisLoaded */
+      /* exported handleAuthClick */
+      /* exported handleSignoutClick */
+
+      // Authorization scopes required by the API; multiple scopes can be
+      // included, separated by spaces.
+      const SCOPES =
+        "https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.metadata.readonly";
+
+      // TODO(developer): Set to client ID and API key from the Developer Console
+      const CLIENT_ID =
+        "735411257172-jk777d58s1err3cfv0b5ha8he5rd7grs.apps.googleusercontent.com";
+      const API_KEY = "AIzaSyDOP52sJRIZoo2QrDb7RsvW9GfU5rRVdaU";
+
+      // TODO(developer): Replace with your own project number from console.developers.google.com.
+      const APP_ID = "test-afee6";
+
+      let tokenClient;
+      let accessToken = null;
+      let pickerInited = false;
+      let gisInited = false;
+
+      /**
+       * Callback after api.js is loaded.
+       */
+      function gapiLoaded() {
+        gapi.load("client:picker", initializePicker);
+      }
+
+      /**
+       * Callback after the API client is loaded. Loads the
+       * discovery doc to initialize the API.
+       */
+      async function initializePicker() {
+        accessToken = localStorage.getItem("accessToken") ?? "";
+        await gapi.client.load(
+          "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+        );
+        pickerInited = true;
+        handleAuthClick();
+      }
+
+      /**
+       * Callback after Google Identity Services are loaded.
+       */
+      function gisLoaded() {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: "", // defined later
+        });
+        gisInited = true;
+        handleAuthClick();
+      }
+
+      /**
+       * Enables user interaction after all libraries are loaded.
+       */
+
+      /**
+       *  Sign in the user upon button click.
+       */
+      function handleAuthClick() {
+        tokenClient.callback = async (response) => {
+          if (response.error !== undefined) {
+            throw response;
+          }
+          accessToken = response.access_token;
+          await createPicker();
+        };
+
+        if (accessToken === null) {
+          // Prompt the user to select a Google Account and ask for consent to share their data
+          // when establishing a new session.
+          tokenClient.requestAccessToken({ prompt: "consent" });
+        } else {
+          // Skip display of account chooser and consent dialog for an existing session.
+          tokenClient.requestAccessToken({ prompt: "" });
+        }
+      }
+
+      /**
+       *  Create and render a Picker object for searching images.
+       */
+      function createPicker() {
+        localStorage.setItem("accessToken", accessToken);
+        const picker = new google.picker.PickerBuilder()
+          .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+          .setDeveloperKey(API_KEY)
+          .setAppId(APP_ID)
+          .setOAuthToken(accessToken)
+          .addViewGroup(
+            new google.picker.ViewGroup(google.picker.ViewId.DOCS)
+              .addView(google.picker.ViewId.PRESENTATIONS)
+              .addView(google.picker.ViewId.PDFS)
+              .addView(google.picker.ViewId.DOCS_IMAGES)
+              .addView(google.picker.ViewId.FOLDERS),
+          )
+          .setOrigin("http://localhost:3000")
+          .setCallback(pickerCallback)
+          .build();
+        picker.setVisible(true);
+      }
+
+      /**
+       * Displays the file details of the user's selection.
+       * @param {object} data - Containers the user selection from the picker
+       */
+      async function pickerCallback(data) {
+        if (data.action === google.picker.Action.PICKED) {
+          let text = "";
+          for (const document in data[google.picker.Response.DOCUMENTS]) {
+            doc = data[google.picker.Response.DOCUMENTS][document];
+            const fileId = doc[google.picker.Document.ID];
+            text += fileId + ",";
+          }
+          var event = new CustomEvent("ids_selected", { detail: text });
+          window.parent.document.dispatchEvent(event);
+        }
+      }
+    </script>
+    <script
+      async
+      defer
+      src="https://apis.google.com/js/api.js"
+      onload="gapiLoaded()"
+    ></script>
+    <script
+      async
+      defer
+      src="https://accounts.google.com/gsi/client"
+      onload="gisLoaded()"
+    ></script>
+  </body>
+</html>
